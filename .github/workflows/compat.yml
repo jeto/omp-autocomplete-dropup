@@ -1,0 +1,92 @@
+# Checks the plugin against the latest omp release: type check against omp's packages, then a
+# terminal smoke test with the real omp binary. Runs daily because omp ships very often, and
+# publishes the result as the README badge (badges branch, shields.io endpoint).
+name: omp compatibility
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compat:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.omp.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve latest omp release
+        id: omp
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release view --repo can1357/oh-my-pi --json tagName --jq .tagName)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "Testing against omp $tag" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install omp
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.omp.outputs.tag }}
+        run: |
+          dir="$RUNNER_TEMP/omp"
+          gh release download "$TAG" --repo can1357/oh-my-pi --pattern omp-linux-x64 --pattern SHA256SUMS.txt --dir "$dir"
+          cd "$dir"
+          grep ' omp-linux-x64$' SHA256SUMS.txt | sha256sum --check -
+          mkdir -p bin && mv omp-linux-x64 bin/omp && chmod +x bin/omp
+          echo "$dir/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Type check against the latest omp packages
+        env:
+          VERSION: ${{ steps.omp.outputs.version }}
+        run: |
+          npm install --no-audit --no-fund --ignore-scripts
+          npm install --no-save --no-audit --no-fund --ignore-scripts \
+            "@oh-my-pi/pi-coding-agent@$VERSION" "@oh-my-pi/pi-tui@$VERSION"
+          npx tsc -p .
+
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+
+      - name: Terminal smoke test
+        run: |
+          omp plugin link "$GITHUB_WORKSPACE"
+          uv run test/smoke.py
+
+  badge:
+    needs: compat
+    if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Publish badge to the badges branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RESULT: ${{ needs.compat.result }}
+          VERSION: ${{ needs.compat.outputs.version }}
+        run: |
+          if [ "$RESULT" = success ]; then
+            message="v$VERSION passing"; color=brightgreen
+          else
+            message="v${VERSION:-unknown} failing"; color=red
+          fi
+          mkdir badge && cd badge
+          git init --quiet --initial-branch badges
+          printf '{"schemaVersion":1,"label":"latest omp","message":"%s","color":"%s"}\n' "$message" "$color" > omp.json
+          git add omp.json
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet --message "Badge: $message"
+          git push --force --quiet "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" badges

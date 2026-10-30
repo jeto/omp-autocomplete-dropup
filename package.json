@@ -1,0 +1,65 @@
+{
+  "name": "omp-autocomplete-dropup",
+  "version": "0.1.0",
+  "description": "oh-my-pi extension: show the prompt autocomplete dropdown above the input, overlaid on the transcript, so the input never moves",
+  "license": "MIT",
+  "author": "Jere Toivonen",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeto/omp-autocomplete-dropup.git"
+  },
+  "type": "module",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "keywords": [
+    "omp",
+    "oh-my-pi",
+    "omp-plugin",
+    "autocomplete"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "smoke": "uv run test/smoke.py"
+  },
+  "devDependencies": {
+    "@oh-my-pi/pi-coding-agent": "18.14.0",
+    "@oh-my-pi/pi-tui": "18.14.0",
+    "@types/bun": "1.4.4",
+    "typescript": "7.0.2"
+  },
+  "omp": {
+    "extensions": [
+      "./src/index.ts"
+    ],
+    "settings": {
+      "mode": {
+        "type": "enum",
+        "values": [
+          "overlay",
+          "inline"
+        ],
+        "default": "overlay",
+        "description": "overlay: draw the list over the transcript above the input; inline: insert it above the input and push the transcript up"
+      },
+      "scrollbackRestore": {
+        "type": "enum",
+        "values": [
+          "typing-pause",
+          "on-close"
+        ],
+        "default": "typing-pause",
+        "description": "When rows the list uncovered in terminal scrollback are restored (a full history replay): after typing pauses, or only when the list closes"
+      },
+      "scrollbackRestoreDelayMs": {
+        "type": "number",
+        "default": 150,
+        "min": 0,
+        "max": 2000,
+        "step": 50,
+        "description": "Typing pause before a typing-pause restore runs"
+      }
+    }
+  }
+}
