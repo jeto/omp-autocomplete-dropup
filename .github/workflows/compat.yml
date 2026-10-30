@@ -58,6 +58,9 @@ jobs:
           npx tsc -p .
 
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          # The smoke test pins its dependencies inline (PEP 723); there is no lockfile.
+          cache-dependency-glob: test/smoke.py
 
       - name: Terminal smoke test
         run: |
