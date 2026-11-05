@@ -38,6 +38,8 @@ COLS = 110
 STEP_SECONDS = 1.2
 KEY_BYTES = {"ESC": b"\x1b", "BS": b"\x7f", "CR": b"\r"}
 STEPS = ["/", "s", "e", "z", "BS", "ESC"]
+# Typed and deleted again to prove the prompt accepts input.
+PROBE = "x"
 
 
 @dataclass(frozen=True)
@@ -46,12 +48,14 @@ class Scenario:
     rows: int
     shape: str
     setup_keys: tuple[str, ...] = ()
+    # A screen line that proves the setup keys ran.
+    setup_line: str | None = None
 
 
 SCENARIOS = [
     # Live transcript filling the screen (bash output needs no model).
-    Scenario("filled-band", 20, "band", ("!!seq 1 60", "CR")),
-    Scenario("filled-claude", 20, "claude", ("!!seq 1 60", "CR")),
+    Scenario("filled-band", 20, "band", ("!!seq 1 60", "CR"), "60"),
+    Scenario("filled-claude", 20, "claude", ("!!seq 1 60", "CR"), "60"),
     # Small terminal: the startup banner is partly in native scrollback above the live viewport.
     Scenario("scrollback-claude", 12, "claude"),
 ]
@@ -99,6 +103,31 @@ class Terminal:
             elif time.time() - start >= minimum and time.time() - changed_at >= quiet:
                 return
 
+    def wait_ready(self, limit: float = 60.0) -> bool:
+        """Wait until the prompt echoes typed input; a quiet screen alone can be a startup pause."""
+        self.wait_settled()
+        end = time.time() + limit
+        while time.time() < end:
+            self.send(PROBE)
+            for _ in range(12):
+                self.pump(0.25)
+                echoed = self.probes_at_cursor()
+                if echoed:
+                    for _ in range(echoed):
+                        self.send("BS")
+                    # Probes buffered during startup may still arrive; delete those too.
+                    self.wait_settled(minimum=0.5)
+                    while (late := self.probes_at_cursor()) and time.time() < end:
+                        for _ in range(late):
+                            self.send("BS")
+                        self.wait_settled(minimum=0.5)
+                    return not self.probes_at_cursor()
+        return False
+
+    def probes_at_cursor(self) -> int:
+        before = self.screen.display[self.screen.cursor.y][: self.screen.cursor.x]
+        return len(before) - len(before.rstrip(PROBE))
+
     def send(self, key: str) -> None:
         os.write(self.fd, KEY_BYTES.get(key, key.encode()))
 
@@ -123,12 +152,15 @@ def run(scenario: Scenario, config_dir: str) -> list[str]:
     term = Terminal(scenario.rows, ["--config", config])
     failures: list[str] = []
     try:
-        term.wait_settled()
+        if not term.wait_ready():
+            return ["omp never accepted input", *screen_dump(term)]
         for key in scenario.setup_keys:
             term.send(key)
             term.pump(1.5)
         term.wait_settled(minimum=0.5)
         pre = term.lines()
+        if scenario.setup_line and scenario.setup_line not in (line.strip() for line in pre):
+            return [f"setup {scenario.setup_keys!r} did not run", *screen_dump(term)]
         input_row = term.screen.cursor.y
         for key in STEPS:
             term.send(key)
@@ -149,10 +181,14 @@ def run(scenario: Scenario, config_dir: str) -> list[str]:
             if key == "ESC" and changed:
                 failures.append(f"{where}: screen not restored, changed rows {changed}")
         if failures:
-            failures.append("screen:\n" + "\n".join(f"  {i:2}|{line}" for i, line in enumerate(term.lines())))
+            failures.extend(screen_dump(term))
     finally:
         term.close()
     return failures
+
+
+def screen_dump(term: Terminal) -> list[str]:
+    return ["screen:\n" + "\n".join(f"  {i:2}|{line}" for i, line in enumerate(term.lines()))]
 
 
 def main() -> int:
