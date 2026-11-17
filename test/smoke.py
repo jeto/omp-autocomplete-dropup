@@ -179,7 +179,8 @@ def run(scenario: Scenario, config_dir: str) -> list[str]:
             if key == "z" and len(changed) > 3:
                 failures.append(f"{where}: box did not shrink to one item, changed rows {changed}")
             if key == "ESC" and changed:
-                failures.append(f"{where}: screen not restored, changed rows {changed}")
+                diff = "".join(f"\n    {i:2} before|{pre[i]}\n    {i:2} after |{now[i]}" for i in changed)
+                failures.append(f"{where}: screen not restored, changed rows {changed}:{diff}")
         if failures:
             failures.extend(screen_dump(term))
     finally:
