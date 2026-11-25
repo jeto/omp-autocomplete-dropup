@@ -52,6 +52,14 @@ jobs:
         env:
           VERSION: ${{ steps.omp.outputs.version }}
         run: |
+          # npm packages land some minutes after the GitHub release; wait up to 60 minutes for them.
+          for attempt in $(seq 60); do
+            if [ -n "$(npm view "@oh-my-pi/pi-coding-agent@$VERSION" version 2>/dev/null)" ] \
+              && [ -n "$(npm view "@oh-my-pi/pi-tui@$VERSION" version 2>/dev/null)" ]; then break; fi
+            if [ "$attempt" = 60 ]; then echo "::error::omp $VERSION packages are not on npm after 60 minutes"; exit 1; fi
+            echo "omp $VERSION packages not on npm yet, retrying in 60 s"
+            sleep 60
+          done
           npm install --no-audit --no-fund --ignore-scripts
           npm install --no-save --no-audit --no-fund --ignore-scripts \
             "@oh-my-pi/pi-coding-agent@$VERSION" "@oh-my-pi/pi-tui@$VERSION"
