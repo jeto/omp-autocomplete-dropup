@@ -52,17 +52,22 @@ jobs:
         env:
           VERSION: ${{ steps.omp.outputs.version }}
         run: |
-          # npm packages land some minutes after the GitHub release; wait up to 60 minutes for them.
+          npm install --no-audit --no-fund --ignore-scripts
+          # omp publishes its npm packages one by one, some minutes after the GitHub release:
+          # retry while any of them (or their omp dependencies) is missing, for up to 60 minutes.
+          log="$RUNNER_TEMP/npm-install.log"
           for attempt in $(seq 60); do
-            if [ -n "$(npm view "@oh-my-pi/pi-coding-agent@$VERSION" version 2>/dev/null)" ] \
-              && [ -n "$(npm view "@oh-my-pi/pi-tui@$VERSION" version 2>/dev/null)" ]; then break; fi
-            if [ "$attempt" = 60 ]; then echo "::error::omp $VERSION packages are not on npm after 60 minutes"; exit 1; fi
-            echo "omp $VERSION packages not on npm yet, retrying in 60 s"
+            if npm install --no-save --no-audit --no-fund --ignore-scripts \
+              "@oh-my-pi/pi-coding-agent@$VERSION" "@oh-my-pi/pi-tui@$VERSION" > "$log" 2>&1; then
+              cat "$log"
+              break
+            fi
+            if ! grep -q ETARGET "$log"; then cat "$log"; exit 1; fi
+            missing=$(grep -o 'No matching version found for [^ ]*' "$log" | head -1)
+            if [ "$attempt" = 60 ]; then echo "::error::omp $VERSION is not fully on npm after 60 minutes: $missing"; exit 1; fi
+            echo "omp $VERSION not fully on npm yet ($missing), retrying in 60 s"
             sleep 60
           done
-          npm install --no-audit --no-fund --ignore-scripts
-          npm install --no-save --no-audit --no-fund --ignore-scripts \
-            "@oh-my-pi/pi-coding-agent@$VERSION" "@oh-my-pi/pi-tui@$VERSION"
           npx tsc -p .
 
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
