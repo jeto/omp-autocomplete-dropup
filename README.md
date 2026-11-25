@@ -18,6 +18,9 @@ omp plugin install github:jeto/omp-autocomplete-dropup   # or gitlab:…, or a f
 Restart omp afterwards (`/restart` resumes the current session). Update with
 `omp plugin upgrade omp-autocomplete-dropup`.
 
+Needs omp **19.2** or newer, which rebuilt the terminal UI. For omp 18.x, install v0.1.0:
+`omp plugin install github:jeto/omp-autocomplete-dropup#v0.1.0`.
+
 For local development, link a checkout instead: `omp plugin link /path/to/omp-autocomplete-dropup`.
 
 ## Settings
@@ -29,48 +32,38 @@ Change them in omp's plugin settings (`/settings` → plugins), with
 | Setting | Values | Default | Effect |
 |---|---|---|---|
 | `mode` | `overlay`, `inline` | `overlay` | `overlay` draws the list over the transcript; `inline` inserts it above the input and pushes the transcript up |
-| `scrollbackRestore` | `typing-pause`, `on-close` | `typing-pause` | When transcript rows the list uncovered in terminal scrollback are restored (see below) |
-| `scrollbackRestoreDelayMs` | 0–2000 | `150` | Typing pause before a `typing-pause` restore |
 
 `/dropup` toggles `mode`; `/dropup overlay` and `/dropup inline` set it. Settings edited outside
 `/dropup` apply from the next time the list opens.
 
 ## How it works
 
-The editor is replaced by a subclass that never adds the dropdown rows to omp's layout. After every
-frame it writes the list directly onto the terminal rows above the input (cursor saved and
-restored, inside a synchronized update), leaving one blank separator row above the list.
+omp paints the dropdown as rows appended below the composer that draw over the transcript; the
+layout then slides the transcript and the composer up by the list's height. This extension wraps
+omp's composer painter so the list rows never enter the layout, and wraps the terminal frame
+writer so that, just before each frame is written, the list rows replace the viewport rows directly
+above the input, with one blank separator row on top.
 
-Anything omp draws below the input (a bottom status bar in the `claude`, `rule`, `pi`, … composer
-shapes, extension `belowEditor` widgets) is measured each frame, so the box always ends directly
-above the editor. Stock omp hides the bottom status bar while the dropdown is open, to make room
-for it below the input; this extension keeps the bar visible unless the list really renders there,
-so the input does not shift by a row.
+Because the list is part of the frame omp diffs, omp itself repaints the transcript rows the list
+uncovers when it shrinks or closes. Nothing is written to the terminal behind omp's back.
 
-When the list shrinks or closes, the rows it uncovered are restored:
+Stock omp also hides the bottom status bar (`claude`, `rule`, `pi`, … composer shapes) while the
+dropdown is open, which moves the input down a row. The extension keeps the bar in place.
 
-- rows still in omp's live viewport: a viewport repaint, immediately;
-- rows already in native terminal scrollback, which omp cannot repaint in place: a full history
-  replay, the same one omp runs after a theme change. With `typing-pause` this runs once typing
-  pauses for `scrollbackRestoreDelayMs`; with `on-close` only when the list closes, and uncovered
-  rows stay blank until then.
-
-When there is no room above the input (a short session in a small terminal), the list renders below
-the input as stock omp does, growing into the empty rows there.
+When fewer rows than the list fit above the input (a short session in a small terminal), the list
+shows a window around the selected item. With under three rows of room, it renders below the input
+as stock omp does.
 
 ## Caveats
 
-- **Relies on omp internals**: the dropdown rows being appended after the editor rows in
-  `Editor.render()`, `Editor.debugChildren`, the composer mounting its rows as the TUI's children
-  in screen order, `TUI.getMutableViewport()`, and the status line's `setAutocompleteActiveProbe`
-  (reached via `Editor.composerFacts`). When one of these is missing the dropdown falls back to the
-  stock layout; a changed meaning could misplace the box. The badge above shows whether the latest
-  omp release still passes; CI checks it daily.
-- **History replay** rewrites the whole transcript, which can be noticeable in very long sessions,
-  and clears terminal scrollback from before omp started. Use `on-close` to replay at most once per
-  list.
-- Output streaming under an open list can briefly overwrite the box until the next frame repaints it.
-- Only one extension can replace the prompt editor. If another one already did, this one stays off.
+- **Relies on omp internals**: the composer's `col` `omp.editor` painter returning the list as
+  trailing `covering` rows, the status panel's `col` `omp.status.panel` painter and its
+  `placement.autocomplete` flag, and `FrameWriter.present` receiving each frame with the caret in
+  viewport coordinates. When the composer painter is missing the dropdown renders stock; a changed
+  meaning could misplace the box. The badge above shows whether the latest omp release still
+  passes; CI checks it daily.
+- Clicking a list item is untested: stock omp does not select an item on click in the smoke test's
+  terminal emulator either.
 
 ## Development
 
