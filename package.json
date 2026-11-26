@@ -1,6 +1,6 @@
 {
   "name": "omp-autocomplete-dropup",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "oh-my-pi extension: show the prompt autocomplete dropdown above the input, overlaid on the transcript, so the input never moves",
   "license": "MIT",
   "author": "Jere Toivonen",

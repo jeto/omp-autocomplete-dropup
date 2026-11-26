@@ -76,10 +76,11 @@ let overlayRows: readonly string[] = [];
 /** The caret's row inside the composer block (list rows excluded), from the last composer paint. */
 let caretRow: number | undefined;
 /**
- * Viewport row of the composer's top, measured on frames where the list does not move it
- * (every layout but `stock`).
+ * Viewport row of the caret, from every frame where the list does not move the composer (all
+ * layouts but `stock`). Frames carry it even when omp reuses a composer block painted before this
+ * extension installed, so the first list after startup knows its room too.
  */
-let composerTop: number | undefined;
+let caretViewportRow: number | undefined;
 
 /** One blank row between the transcript and the list. */
 const SEPARATOR = 1;
@@ -138,7 +139,7 @@ function wrapComposer(original: Painter): Painter {
 			layout = "inline";
 			return listAbove(block, list);
 		}
-		const room = (composerTop ?? 0) - SEPARATOR;
+		const room = caretViewportRow === undefined ? -1 : caretViewportRow - caretRow - SEPARATOR;
 		if (room < Math.min(list, MIN_ROWS)) {
 			layout = "stock";
 			return block;
@@ -170,10 +171,10 @@ function wrapStatusPanel(original: Painter): Painter {
 }
 
 function drawList(frame: FramePlan): FramePlan {
-	if (frame.fullscreen || !frame.cursor || caretRow === undefined) return frame;
+	if (frame.fullscreen || !frame.cursor) return frame;
+	if (layout !== "stock") caretViewportRow = frame.cursor.row;
+	if (layout !== "overlay" || caretRow === undefined) return frame;
 	const top = frame.cursor.row - caretRow;
-	if (layout !== "stock") composerTop = top;
-	if (layout !== "overlay") return frame;
 	// The composer moved since its paint (content changed above it): keep what still fits.
 	const [start, end] = clip(overlayRows, top - SEPARATOR);
 	const rows = ["", ...overlayRows.slice(start, end)];
