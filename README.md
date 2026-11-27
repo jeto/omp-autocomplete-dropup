@@ -6,8 +6,17 @@ An [oh-my-pi](https://github.com/can1357/oh-my-pi) (omp) extension that shows th
 dropdown (`/` commands, `@` files, …) **above** the input, drawn over the transcript like Claude Code
 does. The input never moves while the list opens, narrows, grows or closes.
 
+![With the plugin: typing /, narrowing the list, moving the selection and completing @src/retry.ts while the input stays on the same row](https://github.com/user-attachments/assets/a327b8e9-f087-4e93-bb0a-bf1621f8ccb3)
+
 Stock omp renders the dropdown below the input and resizes it on every keystroke, so the input
 bounces up and down while you type.
+
+<details>
+<summary>The same keystrokes in stock omp</summary>
+
+![Stock omp: the input jumps up when the list opens and moves again as the list narrows, grows and closes](https://github.com/user-attachments/assets/8a33d5a7-a06f-4e87-89e9-4d9285ac3d38)
+
+</details>
 
 ## Install
 
